@@ -74,6 +74,8 @@ class SelectorBIC(ModelSelector):
         """
         # run model
         hmm_model = self.base_model(n_component)
+        if not hmm_model:
+            return NO_SCORE
 
         # calculate log scores
         logN = np.log(len(self.X))  # number of data points
@@ -118,36 +120,32 @@ class SelectorDIC(ModelSelector):
     http://citeseerx.ist.psu.edu/viewdoc/download?doi=10.1.1.58.6208&rep=rep1&type=pdf
     DIC = log(P(X(i)) - 1/(M-1)SUM(log(P(X(all but i))
     '''
-    def change_word(self, new_word):
-        self.this_word = new_word
-        self.sequences = self.words[new_word]
-        self.X, self.lengths = self.hwords[new_word]
-
     def score(self, n_component):
 
         # get score for this word (i.e., log P(X(i)))
         hmm_model = self.base_model(n_component)
+        if not hmm_model:
+            return NO_SCORE
         try:
             logL = hmm_model.score(self.X, self.lengths)
         except:
             return NO_SCORE
 
-        # get score for all other words (i.e., log P(X(all but i)))
+        # get score for this word against other word's sequences (i.e., log P(X(all but i)))
         logP_sum = 0
-        this_word = self.this_word
         for w in self.words.keys():
-            if w != this_word:
-                # create model for new word
-                self.change_word(w)
+            if w != self.this_word:
+
+                # create model word using other word's sequences
+                self.X, self.lengths = self.hwords[w]
                 hmm_model = self.base_model(n_component)
 
-                # get score for new word, add to rolling sum
+                # get score
                 try:
                     logP_sum += hmm_model.score(self.X, self.lengths)
                 except:
                     if self.verbose:
                         print("score failure on {} with {} length".format(self.this_word, len(self.lengths)))
-        self.change_word(this_word)
 
         # calculate DIC score
         M = len(self.words)                 # number of classes (words to be trained)
@@ -173,6 +171,8 @@ class SelectorCV(ModelSelector):
     ''' select best model based on average log Likelihood of cross-validation folds
 
     '''
+
+
     def score(self, n_component):
         """ calculate average logL score for n_component among k-fold subsets
 
