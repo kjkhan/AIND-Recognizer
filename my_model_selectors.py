@@ -7,7 +7,7 @@ from hmmlearn.hmm import GaussianHMM
 from sklearn.model_selection import KFold
 from asl_utils import combine_sequences
 
-NO_SCORE = float('-inf')
+NO_SCORE = float('-inf')   # TODO: change to np.nan?
 
 class ModelSelector(object):
     '''
@@ -94,7 +94,7 @@ class SelectorBIC(ModelSelector):
         p = (n*(n-1) + n-1) + n*f + n*f     # this can be simplified but is kept like this for readability
 
         # calculate BIC score (rearraged so higher score is better)
-        bic_score = 2*logL - p*logN
+        bic_score = -2*logL + p*logN
         return bic_score
 
     def select(self):
@@ -109,7 +109,7 @@ class SelectorBIC(ModelSelector):
         scores = [self.score(n) for n in range(self.min_n_components, self.max_n_components+1)]
 
         # return model with best (lowest) score
-        best_num_components = np.argmax(scores) + self.min_n_components
+        best_num_components = np.argmin(scores) + self.min_n_components
         return self.base_model(best_num_components)
 
 class SelectorDIC(ModelSelector):
@@ -131,21 +131,16 @@ class SelectorDIC(ModelSelector):
         except:
             return NO_SCORE
 
-        # get score for this word against other word's sequences (i.e., log P(X(all but i)))
+        # test other words using this model (i.e., log P(X(all but i)))
         logP_sum = 0
         for w in self.words.keys():
             if w != self.this_word:
-
-                # create model word using other word's sequences
-                self.X, self.lengths = self.hwords[w]
-                hmm_model = self.base_model(n_component)
-
-                # get score
                 try:
-                    logP_sum += hmm_model.score(self.X, self.lengths)
+                    X, lengths = self.hwords[w]
+                    logP_sum += hmm_model.score(X, lengths)
                 except:
                     if self.verbose:
-                        print("score failure on {} with {} length".format(self.this_word, len(self.lengths)))
+                        print("score failure on {} against {} sequences with {} length".format(self.this_word, w, len(self.lengths)))
 
         # calculate DIC score
         M = len(self.words)                 # number of classes (words to be trained)
@@ -163,7 +158,7 @@ class SelectorDIC(ModelSelector):
         # loop through components to get scores
         scores = [self.score(n) for n in range(self.min_n_components, self.max_n_components+1)]
 
-        # return model with best (lowest) score
+        # return model with best (highest) score
         best_num_components = np.argmax(scores) + self.min_n_components
         return self.base_model(best_num_components)
 
@@ -181,6 +176,8 @@ class SelectorCV(ModelSelector):
         scores = []
 
         # initialize split method with 2 folds if there are only 2 samples, otherwise use default 3
+        if len(self.sequences) < 2:
+            return NO_SCORE
         split_method = KFold(n_splits=min(3, len(self.sequences)))
 
         # iterate through splits
@@ -218,6 +215,6 @@ class SelectorCV(ModelSelector):
         # loop through components to get scores
         scores = [self.score(n) for n in range(self.min_n_components, self.max_n_components+1)]
 
-        # return model with best (lowest) score
+        # return model with best (highest) score
         best_num_components = np.argmax(scores) + self.min_n_components
         return self.base_model(best_num_components)
